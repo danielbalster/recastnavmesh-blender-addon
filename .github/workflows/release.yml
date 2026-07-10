@@ -1,5 +1,8 @@
 name: Build and Release
 
+# NOTE: Only Linux builds have been tested. macOS and Windows CI
+# steps are provided as a starting point but are completely untested.
+
 on:
   push:
     tags:
