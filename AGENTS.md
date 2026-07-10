@@ -1,4 +1,57 @@
-# AGENTS.md — Recast Blender NavMesh Add-on
+# AGENTS.md — Recast NavMesh Blender Add-on
+
+## Project repository
+
+```
+recastnavmesh-blender-addon/
+├── navmesh_addon/             # Blender add-on directory
+│   ├── __init__.py            # bl_info, register/unregister, library loading
+│   ├── build.py               # ctypes structs + full Recast→Detour pipeline + tile parser
+│   ├── operators.py           # NAVMESH_OT_Rebuild operator
+│   ├── panels.py              # NAVMESH_PT_Main panel
+│   └── libs/                  # compiled .so/.dll/.dylib go here (gitignored)
+├── navmesh_wrapper/
+│   └── wrapper.cpp            # C-linkage adapter: wraps all C++ functions in extern "C"
+├── build_libs.py              # Python build script (clones recast, compiles wrapper)
+├── package.py                 # Creates .zip for Blender add-on installation
+├── .github/workflows/release.yml  # CI/CD: builds on tag, creates multi-platform release
+├── .gitignore
+├── LICENSE                    # MIT
+├── README.md
+└── AGENTS.md                  # This file
+```
+
+### Development workspace layout (for reference)
+
+```
+recast-blender/
+├── recastnavigation/          # full upstream clone (not shallow)
+├── navmesh_addon/             # same as repo navmesh_addon/
+├── navmesh_wrapper/           # same as repo navmesh_wrapper/
+└── build_libs.sh              # shell equivalent of build_libs.py
+```
+
+## Workflow
+
+### Build and release
+```bash
+# Local build
+python3 build_libs.py
+
+# Package for Blender
+python3 package.py
+
+# Create a release tag
+git tag v0.1.0
+git push origin v0.1.0
+# CI builds all platforms and creates a GitHub Release automatically
+```
+
+### CI/CD
+- **Trigger**: pushing a `v*` tag (e.g., `v0.1.0`)
+- **Builds**: Linux (.so), macOS (.dylib), Windows (.dll)
+- **Release**: Creates GitHub Release with add-on .zip + per-platform library files
+- Users install the add-on .zip, then manually copy their platform's library into `navmesh_addon/libs/`
 
 ## Architecture
 
@@ -379,3 +432,18 @@ tri.vertices[1] + v_base,  # swapped
 - No `mesh.free()` or `bpy.data.meshes.remove()` needed when using `.data` directly (no copy made).
 - `mesh.calc_loop_triangles()` still works.
 - `obj["key"]` for custom properties.
+
+## Release checklist
+
+1. Bump version in `navmesh_addon/__init__.py` (`bl_info["version"]`)
+2. Commit: `git commit -m "Release vX.Y.Z"`
+3. Tag: `git tag vX.Y.Z`
+4. Push: `git push origin main && git push origin vX.Y.Z`
+5. CI builds all platforms automatically and creates a GitHub Release
+6. Edit the release notes on GitHub if needed
+
+### To verify a release locally
+```bash
+python3 build_libs.py           # builds libNavMeshWrapper.so
+python3 package.py --version X.Y.Z  # creates navmesh_addon-X.Y.Z.zip
+```
