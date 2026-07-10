@@ -1,0 +1,24 @@
+# Build output
+navmesh_addon/libs/*.so
+navmesh_addon/libs/*.so.*
+navmesh_addon/libs/*.dll
+navmesh_addon/libs/*.dylib
+
+# Cloned dependency
+recastnavigation/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.zip
