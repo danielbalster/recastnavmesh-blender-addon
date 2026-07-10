@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Clone recastnavigation
+        shell: bash
         run: |
           git clone --depth 1 --branch main \
             https://github.com/recastnavigation/recastnavigation.git \
@@ -49,15 +50,16 @@ jobs:
 
       - name: Build wrapper (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: |
-          mkdir -p navmesh_addon\libs
+          mkdir -p navmesh_addon/libs
           g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
-            -I recastnavigation\Recast\Include \
-            -I recastnavigation\Detour\Include \
-            -o navmesh_addon\libs\libNavMeshWrapper.dll \
-            recastnavigation\Recast\Source\*.cpp \
-            recastnavigation\Detour\Source\*.cpp \
-            navmesh_wrapper\wrapper.cpp
+            -I recastnavigation/Recast/Include \
+            -I recastnavigation/Detour/Include \
+            -o navmesh_addon/libs/libNavMeshWrapper.dll \
+            recastnavigation/Recast/Source/*.cpp \
+            recastnavigation/Detour/Source/*.cpp \
+            navmesh_wrapper/wrapper.cpp
 
       - name: Upload library
         uses: actions/upload-artifact@v4
