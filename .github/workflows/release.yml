@@ -70,6 +70,8 @@ jobs:
   release:
     needs: build-libs
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
