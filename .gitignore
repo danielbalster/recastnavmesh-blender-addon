@@ -22,3 +22,7 @@ Thumbs.db
 
 # Build artifacts
 *.zip
+
+# Kilo AI config (track kilo.json only)
+.kilo/*
+!.kilo/kilo.json

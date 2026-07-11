@@ -433,6 +433,108 @@ tri.vertices[1] + v_base,  # swapped
 - `mesh.calc_loop_triangles()` still works.
 - `obj["key"]` for custom properties.
 
+## Key pitfalls (post-panel rewrite)
+
+### 7. Panel draw() cannot write to ID data-blocks
+**Problem**: Assigning to a `PointerProperty` on `Scene` (e.g., `settings.cell_size = ...`) during `draw()` raises `AttributeError: Writing to ID classes in this context is not allowed: Scene, Scene data-block`. This silently hides the entire panel.
+
+**Solution**: Do not modify any `bpy.types.Scene` or ID data-block properties inside a panel's `draw()` method. Draw is read-only for ID data. Use `layout.prop()` for user-editable values (these write back via Blender's RNA system, which IS allowed). The `_sync_settings_from_navmesh` function was removed from `draw()` for this reason.
+
+**Pattern**: Scene `NavMeshSettings` stores the "next build" values. Navmesh objects store the values that were *used* to build them as custom properties (shown read-only in the Stats section). No cross-synchronization happens in draw().
+
+### 8. UILayout has no `.children` attribute
+**Problem**: The Python API for `UILayout` does not expose a `.children` iterable. Code like `for item in col.children: item.enabled = False` raises `AttributeError`.
+
+**Solution**: Set `col.enabled = False` *before* calling `col.prop()` — all subsequently added child widgets inherit the disabled state:
+```python
+col = box.column(align=True)
+col.enabled = False
+col.prop(nm, f'["{key}"]', text=label, emboss=False)
+```
+
+### 9. bpy_prop_collection.__contains__ expects a name string
+**Problem**: `obj not in coll.objects` fails with `TypeError: expected a string or a tuple of strings`. Blender's `bpy_prop_collection.__contains__` takes a name key, not an object reference.
+
+**Solution**: Always use `obj.name not in coll.objects` or `obj.name in coll.objects`.
+
+### 10. Navmesh linking order matters for collection placement
+**Problem**: Linking the navmesh object via `context.scene.collection.objects.link()` before manipulating the source collection can cause the navmesh to end up in the wrong collection (e.g., `NM_Source_*`).
+
+**Solution**: Defer linking the navmesh to `context.scene.collection` until AFTER all source collection setup is complete:
+```python
+nm_obj = bpy.data.objects.new(nm_name, new_mesh)
+# ... material, properties, source collection setup ...
+nm_obj["navmesh_source_collection"] = coll_name
+# Link LAST, after all collection manipulation
+context.scene.collection.objects.link(nm_obj)
+```
+
+### 11. FloatProperty does not support subtype="AREA"
+**Problem**: `FloatProperty(subtype="AREA")` fails registration with a non-obvious error. Valid FloatProperty subtypes are: `NONE`, `PIXEL`, `PERCENTAGE`, `FACTOR`, `ANGLE`, `TIME`, `TIME_ABSOLUTE`, `DISTANCE`, `DISTANCE_CAMERA`, `POWER`, `TEMPERATURE`.
+
+**Solution**: `AREA` is only valid for `IntProperty`. For FloatProperty area values, omit the subtype and describe the units in the `description` parameter.
+
+## Source collection management
+
+The add-on uses a named collection (`NM_Source_<name>`) to persist the set of objects used to generate a navmesh. This enables rebuilding without re-selecting geometry.
+
+### Pattern
+```python
+# operators.py — _resolve_source_objects()
+# Priority: 1) selected geometry → 2) source collection of selected navmesh
+#   → 3) fallback: any navmesh with a source collection
+# Always filters out navmesh objects: "navmesh_cs" not in o
+
+# operators.py — rebuild execute()
+# Source collection is created/found, source objects linked/unlinked,
+# navmesh object placed in scene.collection (NEVER in source collection)
+```
+
+### Key details
+- `context.scene.collection` = master collection (always). Use this, not `context.collection`.
+- `context.collection` = user's active collection (could be anything, including `NM_Source_*`).
+- Navmesh objects are always identified by the `navmesh_cs` custom property.
+- Source objects are MESH objects that do NOT have `navmesh_cs`.
+- `_find_any_navmesh_with_collection()` is the global fallback when nothing is selected.
+
+## Full build settings exposure
+
+All rcConfig fields are now user-configurable via `NavMeshSettings` (scene properties):
+
+| Property | Type | Default | rcConfig field | Conversion |
+|----------|------|---------|---------------|------------|
+| `cell_size` | FloatProperty | 0.3 | `cs` | direct |
+| `cell_height` | FloatProperty | 0.2 | `ch` | direct |
+| `agent_height` | FloatProperty | 2.0 | `walkableHeight` | `ceil(v / ch)` |
+| `agent_radius` | FloatProperty | 0.6 | `walkableRadius` | `ceil(v / cs)` |
+| `agent_max_climb` | FloatProperty | 0.9 | `walkableClimb` | `floor(v / ch)` |
+| `agent_max_slope` | FloatProperty | 45.0 | `walkableSlopeAngle` | direct |
+| `max_edge_len` | FloatProperty | 12.0 | `maxEdgeLen` | `int(v / cs)` |
+| `max_simplification_error` | FloatProperty | 1.3 | `maxSimplificationError` | direct (voxels) |
+| `min_region_area` | FloatProperty | 5.76 | `minRegionArea` | `int(v / cs²)` |
+| `merge_region_area` | FloatProperty | 36.0 | `mergeRegionArea` | `int(v / cs²)` |
+| `max_verts_per_poly` | IntProperty | 6 | `maxVertsPerPoly` | direct |
+| `detail_sample_dist` | FloatProperty | 6.0 | `detailSampleDist` | direct (world) |
+| `detail_sample_max_error` | FloatProperty | 1.0 | `detailSampleMaxError` | direct (world) |
+
+Settings exposed in world units (meters, m², degrees) wherever possible. Voxel conversion happens in `operators.py` config dict construction.
+
+All settings plus build stats (poly_count, vert_count, tri_count, build_time) are stored as custom properties on the navmesh object for display in the Stats section.
+
+## Blender Flatpak deployment
+
+**Install path**: `/home/dbalster/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/`
+
+After editing workspace files, copy them to the installed addon directory:
+```bash
+cp navmesh_addon/panels.py ~/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/
+cp navmesh_addon/operators.py ~/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/
+```
+
+**Restart is required**: Blender does not auto-reload addon file changes. `importlib.reload()` and `bpy.ops.script.reload()` are unreliable. A full Blender restart or addon disable/re-enable through Preferences is always needed.
+
+**Error display**: `traceback.print_exc()` writes to Blender's system console (Window → Toggle System Console on Linux). For user-visible errors, render them into the panel UILayout.
+
 ## Release checklist
 
 1. Bump version in `navmesh_addon/__init__.py` (`bl_info["version"]`)

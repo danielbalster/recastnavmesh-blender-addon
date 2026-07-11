@@ -1,0 +1,12 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "plugin": [
+    "@dbalster/gdb-plugin",
+    "@dbalster/blender-plugin",
+    "@dbalster/prompt-preprocessor"
+  ],
+  "indexing": {
+    "enabled": false
+  },
+  "snapshot": false
+}
