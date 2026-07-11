@@ -1,5 +1,7 @@
 # Recast NavMesh — Blender Add-on
 
+> **Human-Written Notice**: There was this nice recast/navmesh support in the past, I hope you find this useful. It ships with an AGENTS.md. I've used `kilo` as the harness with `deepseek-v4-pro`, and I've installed `@dbalster/blender-plugin` and `@dbalster/gdb-plugin` to allow the AI to debug and also operate blender. 
+
 Generate navigation meshes from selected Blender geometry using the [Recast & Detour](https://github.com/recastnavigation/recastnavigation) library.
 
 Renders semi-transparent green helper meshes with a properties panel in the 3D View sidebar, including a one-click **Rebuild** button.
