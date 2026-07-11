@@ -29,7 +29,6 @@ def main():
 
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(ADDON_DIR):
-            # Skip empty libs directory (user runs build_libs.py after install)
             dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git")]
             for fname in files:
                 if fname.endswith(".pyc") or fname.startswith("."):
@@ -43,9 +42,7 @@ def main():
     print(
         "Install in Blender: Edit > Preferences > Add-ons > Install... > select this file"
     )
-    print(
-        "Then run: python build_libs.py in the add-on directory to compile the native library."
-    )
+    print("Make sure navmesh_addon/libs/libNavMeshWrapper.so exists before installing.")
 
 
 if __name__ == "__main__":

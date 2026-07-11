@@ -1,8 +1,5 @@
 name: Build and Release
 
-# NOTE: Only Linux builds have been tested. macOS and Windows CI
-# steps are provided as a starting point but are completely untested.
-
 on:
   push:
     tags:
@@ -10,22 +7,17 @@ on:
 
 jobs:
   build-libs:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Clone recastnavigation
-        shell: bash
         run: |
           git clone --depth 1 --branch main \
             https://github.com/recastnavigation/recastnavigation.git \
             recastnavigation
 
-      - name: Build wrapper (Linux)
-        if: runner.os == 'Linux'
+      - name: Build wrapper
         run: |
           mkdir -p navmesh_addon/libs
           g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
@@ -36,36 +28,11 @@ jobs:
             recastnavigation/Detour/Source/*.cpp \
             navmesh_wrapper/wrapper.cpp
 
-      - name: Build wrapper (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p navmesh_addon/libs
-          g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
-            -I recastnavigation/Recast/Include \
-            -I recastnavigation/Detour/Include \
-            -o navmesh_addon/libs/libNavMeshWrapper.dylib \
-            recastnavigation/Recast/Source/*.cpp \
-            recastnavigation/Detour/Source/*.cpp \
-            navmesh_wrapper/wrapper.cpp
-
-      - name: Build wrapper (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          mkdir -p navmesh_addon/libs
-          g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
-            -I recastnavigation/Recast/Include \
-            -I recastnavigation/Detour/Include \
-            -o navmesh_addon/libs/libNavMeshWrapper.dll \
-            recastnavigation/Recast/Source/*.cpp \
-            recastnavigation/Detour/Source/*.cpp \
-            navmesh_wrapper/wrapper.cpp
-
       - name: Upload library
         uses: actions/upload-artifact@v4
         with:
-          name: lib-${{ matrix.os }}
-          path: navmesh_addon/libs/libNavMeshWrapper.*
+          name: lib-linux
+          path: navmesh_addon/libs/libNavMeshWrapper.so
 
   release:
     needs: build-libs
@@ -75,21 +42,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Package add-on source
-        run: python3 package.py --version ${{ github.ref_name }}
-
-      - name: Download all library artifacts
+      - name: Download library artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: lib-*
-          path: libs
+          name: lib-linux
+          path: navmesh_addon/libs
+
+      - name: Package add-on (includes libNavMeshWrapper.so)
+        run: python3 package.py --version ${{ github.ref_name }}
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            navmesh_addon-*.zip
-            libs/lib-ubuntu-latest/libNavMeshWrapper.so
-            libs/lib-macos-latest/libNavMeshWrapper.dylib
-            libs/lib-windows-latest/libNavMeshWrapper.dll
+          files: navmesh_addon-*.zip
           generate_release_notes: true
