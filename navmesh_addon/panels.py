@@ -97,6 +97,14 @@ class NAVMESH_PT_Main(bpy.types.Panel):
             if "navmesh_cs" in obj:
                 navmesh_obj = obj
                 break
+        if navmesh_obj is None and context.active_object is not None:
+            if "navmesh_cs" in context.active_object:
+                navmesh_obj = context.active_object
+        if navmesh_obj is None:
+            for obj in bpy.data.objects:
+                if "navmesh_cs" in obj:
+                    navmesh_obj = obj
+                    break
 
         if navmesh_obj is not None:
             _sync_settings_from_navmesh(settings, navmesh_obj)
@@ -148,12 +156,14 @@ class NAVMESH_PT_Main(bpy.types.Panel):
         box = layout.box()
         box.label(text="Stats", icon="INFO")
         col = box.column(align=True)
-        col.prop(navmesh_obj, '["navmesh_poly_count"]', text="Polygons", emboss=False)
-        col.prop(navmesh_obj, '["navmesh_vert_count"]', text="Vertices", emboss=False)
-        col.prop(navmesh_obj, '["navmesh_tri_count"]', text="Triangles", emboss=False)
-        col.prop(
-            navmesh_obj, '["navmesh_build_time"]', text="Build Time (s)", emboss=False
-        )
+        for key, label in [
+            ("navmesh_poly_count", "Polygons"),
+            ("navmesh_vert_count", "Vertices"),
+            ("navmesh_tri_count", "Triangles"),
+            ("navmesh_build_time", "Build Time (s)"),
+        ]:
+            if key in navmesh_obj:
+                col.prop(navmesh_obj, f'["{key}"]', text=label, emboss=False)
         for item in col.children:
             item.enabled = False
 

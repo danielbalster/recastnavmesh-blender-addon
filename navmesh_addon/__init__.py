@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Recast NavMesh",
     "author": "Recast Blender Add-on",
-    "version": (0, 1, 4),
+    "version": (0, 1, 5),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > NavMesh",
     "description": "Generate navigation meshes from selected geometry using Recast/Detour",

@@ -5,35 +5,51 @@ from . import build
 from .panels import _get_or_create_material
 
 
-def _resolve_source_objects(context):
-    sel = list(context.selected_objects)
-    navmesh_obj = None
-    for obj in sel:
+def _find_navmesh_by_collection(objects):
+    for obj in objects:
         if "navmesh_cs" in obj:
-            navmesh_obj = obj
-            break
+            return obj
+    return None
+
+
+def _find_any_navmesh_with_collection():
+    for obj in bpy.data.objects:
+        if "navmesh_cs" in obj and obj.get("navmesh_source_collection", ""):
+            return obj
+    return None
+
+
+def _resolve_source_objects(context):
+    sel = context.selected_objects
+    active = context.active_object
+
+    navmesh_obj = _find_navmesh_by_collection(sel)
+    if navmesh_obj is None and active is not None and active not in sel:
+        navmesh_obj = _find_navmesh_by_collection([active])
 
     has_geometry = any(o.type == "MESH" and "navmesh_cs" not in o for o in sel)
 
-    if (
-        not has_geometry
-        and navmesh_obj is not None
-        and "navmesh_source_collection" in navmesh_obj
-    ):
+    if has_geometry:
+        return [o for o in sel if o.type == "MESH" and "navmesh_cs" not in o], None
+
+    if navmesh_obj is not None and "navmesh_source_collection" in navmesh_obj:
         coll_name = navmesh_obj["navmesh_source_collection"]
         coll = bpy.data.collections.get(coll_name)
         if coll is not None:
             objects = [o for o in coll.objects if o.type == "MESH"]
-            return objects, navmesh_obj
+            if objects:
+                return objects, navmesh_obj
 
-    return [o for o in sel if o.type == "MESH" and "navmesh_cs" not in o], None
+    fallback = _find_any_navmesh_with_collection()
+    if fallback is not None:
+        coll_name = fallback["navmesh_source_collection"]
+        coll = bpy.data.collections.get(coll_name)
+        if coll is not None:
+            objects = [o for o in coll.objects if o.type == "MESH"]
+            if objects:
+                return objects, fallback
 
-
-def _get_navmesh(context):
-    for obj in context.selected_objects:
-        if "navmesh_cs" in obj:
-            return obj
-    return None
+    return [], None
 
 
 def _get_source_collection(navmesh_obj):
@@ -206,7 +222,9 @@ class NAVMESH_OT_AddSourceObject(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        navmesh_obj = _get_navmesh(context)
+        navmesh_obj = _find_navmesh_by_collection(context.selected_objects)
+        if navmesh_obj is None:
+            navmesh_obj = _find_any_navmesh_with_collection()
         if navmesh_obj is None:
             self.report({"ERROR"}, "No NavMesh object selected")
             return {"CANCELLED"}
@@ -241,7 +259,9 @@ class NAVMESH_OT_RemoveSourceObject(bpy.types.Operator):
     object_name: bpy.props.StringProperty(name="Object Name")
 
     def execute(self, context):
-        navmesh_obj = _get_navmesh(context)
+        navmesh_obj = _find_navmesh_by_collection(context.selected_objects)
+        if navmesh_obj is None:
+            navmesh_obj = _find_any_navmesh_with_collection()
         if navmesh_obj is None:
             self.report({"ERROR"}, "No NavMesh object selected")
             return {"CANCELLED"}
