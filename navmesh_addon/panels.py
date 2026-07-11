@@ -129,9 +129,19 @@ class NAVMESH_PT_Main(bpy.types.Panel):
             src_box.label(text="Source Objects", icon="OBJECT_DATA")
             src_names = navmesh_obj["navmesh_source_objects"].split("|")
             for name in src_names:
+                if not name:
+                    continue
+                row = src_box.row(align=True)
                 exists = name in bpy.data.objects
                 icon = "OUTLINER_OB_MESH" if exists else "ERROR"
-                src_box.label(text=name, icon=icon)
+                row.label(text=name, icon=icon)
+                op = row.operator(
+                    "navmesh.remove_source_object", text="", icon="X", emboss=False
+                )
+                op.object_name = name
+            row = src_box.row()
+            row.operator("navmesh.add_source_object", text="Add Selected", icon="ADD")
+            row.label(text="")
 
         box = layout.box()
         box.label(text="Stats", icon="INFO")

@@ -175,7 +175,72 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         return {"FINISHED"}
 
 
-classes = [NAVMESH_OT_Rebuild]
+def _find_navmesh(context):
+    for obj in context.selected_objects:
+        if "navmesh_cs" in obj:
+            return obj
+    return None
+
+
+class NAVMESH_OT_AddSourceObject(bpy.types.Operator):
+    bl_idname = "navmesh.add_source_object"
+    bl_label = "Add to NavMesh"
+    bl_description = "Add selected mesh objects to the navmesh source list"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        navmesh_obj = _find_navmesh(context)
+        if navmesh_obj is None:
+            self.report({"ERROR"}, "No NavMesh object selected")
+            return {"CANCELLED"}
+
+        existing = navmesh_obj.get("navmesh_source_objects", "")
+        existing_set = set(existing.split("|")) if existing else set()
+
+        added = []
+        for obj in context.selected_objects:
+            if obj.type != "MESH" or "navmesh_cs" in obj:
+                continue
+            if obj.name not in existing_set:
+                added.append(obj.name)
+
+        if not added:
+            self.report({"WARNING"}, "No new mesh objects to add")
+            return {"CANCELLED"}
+
+        new_list = existing.split("|") if existing else []
+        new_list.extend(added)
+        navmesh_obj["navmesh_source_objects"] = "|".join(new_list)
+        self.report({"INFO"}, f"Added: {', '.join(added)}")
+        return {"FINISHED"}
+
+
+class NAVMESH_OT_RemoveSourceObject(bpy.types.Operator):
+    bl_idname = "navmesh.remove_source_object"
+    bl_label = "Remove from NavMesh"
+    bl_description = "Remove this object from the navmesh source list"
+    bl_options = {"REGISTER", "UNDO"}
+
+    object_name: bpy.props.StringProperty(name="Object Name")
+
+    def execute(self, context):
+        navmesh_obj = _find_navmesh(context)
+        if navmesh_obj is None:
+            self.report({"ERROR"}, "No NavMesh object selected")
+            return {"CANCELLED"}
+
+        existing = navmesh_obj.get("navmesh_source_objects", "")
+        names = [n for n in existing.split("|") if n and n != self.object_name]
+        navmesh_obj["navmesh_source_objects"] = "|".join(names)
+        self.report({"INFO"}, f"Removed: {self.object_name}")
+        return {"FINISHED"}
+
+
+classes = [
+    NAVMESH_OT_Rebuild,
+    NAVMESH_OT_AddSourceObject,
+    NAVMESH_OT_RemoveSourceObject,
+]
 
 
 def register():
