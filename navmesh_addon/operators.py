@@ -18,23 +18,37 @@ def _resolve_source_objects(context):
     if (
         not has_geometry
         and navmesh_obj is not None
-        and "navmesh_source_objects" in navmesh_obj
+        and "navmesh_source_collection" in navmesh_obj
     ):
-        names = navmesh_obj["navmesh_source_objects"].split("|")
-        objects = []
-        for name in names:
-            obj = bpy.data.objects.get(name)
-            if obj is not None:
-                objects.append(obj)
-        return objects, navmesh_obj
+        coll_name = navmesh_obj["navmesh_source_collection"]
+        coll = bpy.data.collections.get(coll_name)
+        if coll is not None:
+            objects = [o for o in coll.objects if o.type == "MESH"]
+            return objects, navmesh_obj
 
     return [o for o in sel if o.type == "MESH" and "navmesh_cs" not in o], None
+
+
+def _get_navmesh(context):
+    for obj in context.selected_objects:
+        if "navmesh_cs" in obj:
+            return obj
+    return None
+
+
+def _get_source_collection(navmesh_obj):
+    coll_name = navmesh_obj.get("navmesh_source_collection", "")
+    if not coll_name:
+        return None
+    return bpy.data.collections.get(coll_name)
 
 
 class NAVMESH_OT_Rebuild(bpy.types.Operator):
     bl_idname = "navmesh.rebuild"
     bl_label = "Rebuild NavMesh"
-    bl_description = "Generate a navigation mesh from selected geometry"
+    bl_description = (
+        "Generate a navigation mesh from selected geometry or stored source collection"
+    )
     bl_options = {"REGISTER", "UNDO"}
 
     def _collect_mesh_data(self, context, objects):
@@ -75,13 +89,13 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         source_objects, existing_navmesh = _resolve_source_objects(context)
 
         if not source_objects:
-            self.report({"ERROR"}, "No mesh objects selected")
+            self.report({"ERROR"}, "No mesh objects in selection or source collection")
             return {"CANCELLED"}
 
         verts, tris = self._collect_mesh_data(context, source_objects)
 
         if len(verts) < 9 or len(tris) < 3:
-            self.report({"ERROR"}, "Selected meshes have insufficient geometry")
+            self.report({"ERROR"}, "Source objects have insufficient geometry")
             return {"CANCELLED"}
 
         ch = max(settings.cell_height, 0.01)
@@ -162,7 +176,17 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         nm_obj["navmesh_tri_count"] = stats["triCount"]
         nm_obj["navmesh_build_time"] = stats["buildTime"]
 
-        nm_obj["navmesh_source_objects"] = "|".join(o.name for o in source_objects)
+        coll_name = f"NM_Source_{source_name}"
+        coll = bpy.data.collections.get(coll_name)
+        if coll is None:
+            coll = bpy.data.collections.new(coll_name)
+            context.scene.collection.children.link(coll)
+
+        for obj in source_objects:
+            if obj.name not in coll.objects:
+                coll.objects.link(obj)
+
+        nm_obj["navmesh_source_collection"] = coll_name
 
         bpy.ops.object.select_all(action="DESELECT")
         nm_obj.select_set(True)
@@ -175,64 +199,65 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def _find_navmesh(context):
-    for obj in context.selected_objects:
-        if "navmesh_cs" in obj:
-            return obj
-    return None
-
-
 class NAVMESH_OT_AddSourceObject(bpy.types.Operator):
     bl_idname = "navmesh.add_source_object"
-    bl_label = "Add to NavMesh"
-    bl_description = "Add selected mesh objects to the navmesh source list"
+    bl_label = "Add to NavMesh Source"
+    bl_description = "Add selected mesh objects to the navmesh source collection"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        navmesh_obj = _find_navmesh(context)
+        navmesh_obj = _get_navmesh(context)
         if navmesh_obj is None:
             self.report({"ERROR"}, "No NavMesh object selected")
             return {"CANCELLED"}
 
-        existing = navmesh_obj.get("navmesh_source_objects", "")
-        existing_set = set(existing.split("|")) if existing else set()
+        coll = _get_source_collection(navmesh_obj)
+        if coll is None:
+            self.report({"ERROR"}, "NavMesh has no source collection")
+            return {"CANCELLED"}
 
         added = []
         for obj in context.selected_objects:
             if obj.type != "MESH" or "navmesh_cs" in obj:
                 continue
-            if obj.name not in existing_set:
+            if obj.name not in coll.objects:
+                coll.objects.link(obj)
                 added.append(obj.name)
 
         if not added:
             self.report({"WARNING"}, "No new mesh objects to add")
             return {"CANCELLED"}
 
-        new_list = existing.split("|") if existing else []
-        new_list.extend(added)
-        navmesh_obj["navmesh_source_objects"] = "|".join(new_list)
         self.report({"INFO"}, f"Added: {', '.join(added)}")
         return {"FINISHED"}
 
 
 class NAVMESH_OT_RemoveSourceObject(bpy.types.Operator):
     bl_idname = "navmesh.remove_source_object"
-    bl_label = "Remove from NavMesh"
-    bl_description = "Remove this object from the navmesh source list"
+    bl_label = "Remove from NavMesh Source"
+    bl_description = "Remove this object from the navmesh source collection"
     bl_options = {"REGISTER", "UNDO"}
 
     object_name: bpy.props.StringProperty(name="Object Name")
 
     def execute(self, context):
-        navmesh_obj = _find_navmesh(context)
+        navmesh_obj = _get_navmesh(context)
         if navmesh_obj is None:
             self.report({"ERROR"}, "No NavMesh object selected")
             return {"CANCELLED"}
 
-        existing = navmesh_obj.get("navmesh_source_objects", "")
-        names = [n for n in existing.split("|") if n and n != self.object_name]
-        navmesh_obj["navmesh_source_objects"] = "|".join(names)
-        self.report({"INFO"}, f"Removed: {self.object_name}")
+        coll = _get_source_collection(navmesh_obj)
+        if coll is None:
+            self.report({"ERROR"}, "NavMesh has no source collection")
+            return {"CANCELLED"}
+
+        obj = bpy.data.objects.get(self.object_name)
+        if obj is not None and obj.name in coll.objects:
+            coll.objects.unlink(obj)
+            self.report({"INFO"}, f"Removed: {self.object_name}")
+        else:
+            self.report({"WARNING"}, f"Object '{self.object_name}' not in collection")
+
         return {"FINISHED"}
 
 

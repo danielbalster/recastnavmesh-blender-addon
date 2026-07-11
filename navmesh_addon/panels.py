@@ -124,21 +124,23 @@ class NAVMESH_PT_Main(bpy.types.Panel):
 
         layout.separator()
 
-        if "navmesh_source_objects" in navmesh_obj:
+        coll_name = navmesh_obj.get("navmesh_source_collection", "")
+        coll = bpy.data.collections.get(coll_name)
+        if coll is not None:
             src_box = layout.box()
-            src_box.label(text="Source Objects", icon="OBJECT_DATA")
-            src_names = navmesh_obj["navmesh_source_objects"].split("|")
-            for name in src_names:
-                if not name:
+            src_box.label(text=f"Source: {coll_name}", icon="OUTLINER_COLLECTION")
+            for obj in coll.objects:
+                if obj.type != "MESH":
                     continue
                 row = src_box.row(align=True)
-                exists = name in bpy.data.objects
-                icon = "OUTLINER_OB_MESH" if exists else "ERROR"
-                row.label(text=name, icon=icon)
+                row.label(text=obj.name, icon="OUTLINER_OB_MESH")
                 op = row.operator(
-                    "navmesh.remove_source_object", text="", icon="X", emboss=False
+                    "navmesh.remove_source_object",
+                    text="",
+                    icon="X",
+                    emboss=False,
                 )
-                op.object_name = name
+                op.object_name = obj.name
             row = src_box.row()
             row.operator("navmesh.add_source_object", text="Add Selected", icon="ADD")
             row.label(text="")
