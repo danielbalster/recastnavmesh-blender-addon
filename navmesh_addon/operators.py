@@ -1,12 +1,34 @@
 import bpy
 import math
-from bpy.props import (
-    FloatProperty,
-    IntProperty,
-)
 
 from . import build
 from .panels import _get_or_create_material
+
+
+def _resolve_source_objects(context):
+    sel = list(context.selected_objects)
+    navmesh_obj = None
+    for obj in sel:
+        if "navmesh_cs" in obj:
+            navmesh_obj = obj
+            break
+
+    has_geometry = any(o.type == "MESH" and "navmesh_cs" not in o for o in sel)
+
+    if (
+        not has_geometry
+        and navmesh_obj is not None
+        and "navmesh_source_objects" in navmesh_obj
+    ):
+        names = navmesh_obj["navmesh_source_objects"].split("|")
+        objects = []
+        for name in names:
+            obj = bpy.data.objects.get(name)
+            if obj is not None:
+                objects.append(obj)
+        return objects, navmesh_obj
+
+    return [o for o in sel if o.type == "MESH" and "navmesh_cs" not in o], None
 
 
 class NAVMESH_OT_Rebuild(bpy.types.Operator):
@@ -15,56 +37,13 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
     bl_description = "Generate a navigation mesh from selected geometry"
     bl_options = {"REGISTER", "UNDO"}
 
-    cell_size: FloatProperty(
-        name="Cell Size",
-        description="XZ-plane cell size in world units",
-        default=0.3,
-        min=0.01,
-        soft_max=2.0,
-    )
-    cell_height: FloatProperty(
-        name="Cell Height",
-        description="Y-axis cell size in world units",
-        default=0.2,
-        min=0.01,
-        soft_max=1.0,
-    )
-    agent_height: FloatProperty(
-        name="Agent Height",
-        description="Minimum floor-to-ceiling height for walkable areas",
-        default=2.0,
-        min=0.1,
-        soft_max=5.0,
-    )
-    agent_radius: FloatProperty(
-        name="Agent Radius",
-        description="Erosion radius around obstacles",
-        default=0.6,
-        min=0.0,
-        soft_max=2.0,
-    )
-    agent_max_climb: FloatProperty(
-        name="Max Climb",
-        description="Maximum traversable step height",
-        default=0.9,
-        min=0.0,
-        soft_max=2.0,
-    )
-    agent_max_slope: FloatProperty(
-        name="Max Slope",
-        description="Maximum walkable slope angle in degrees",
-        default=45.0,
-        min=0.0,
-        max=89.0,
-    )
-
-    def _collect_mesh_data(self, context):
+    def _collect_mesh_data(self, context, objects):
         all_verts = []
         all_tris = []
 
         depsgraph = context.evaluated_depsgraph_get()
 
-        for obj in context.selected_objects:
+        for obj in objects:
             if obj.type != "MESH":
                 continue
             eval_obj = obj.evaluated_get(depsgraph)
@@ -92,27 +71,29 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         return all_verts, all_tris
 
     def execute(self, context):
-        selected = [o for o in context.selected_objects if o.type == "MESH"]
-        if not selected:
+        settings = context.scene.navmesh_settings
+        source_objects, existing_navmesh = _resolve_source_objects(context)
+
+        if not source_objects:
             self.report({"ERROR"}, "No mesh objects selected")
             return {"CANCELLED"}
 
-        verts, tris = self._collect_mesh_data(context)
+        verts, tris = self._collect_mesh_data(context, source_objects)
 
         if len(verts) < 9 or len(tris) < 3:
             self.report({"ERROR"}, "Selected meshes have insufficient geometry")
             return {"CANCELLED"}
 
-        ch = max(self.cell_height, 0.01)
-        cs = max(self.cell_size, 0.01)
+        ch = max(settings.cell_height, 0.01)
+        cs = max(settings.cell_size, 0.01)
 
         config = {
             "cs": cs,
             "ch": ch,
-            "walkableSlopeAngle": self.agent_max_slope,
-            "walkableHeight": math.ceil(self.agent_height / ch),
-            "walkableClimb": math.floor(self.agent_max_climb / ch),
-            "walkableRadius": math.ceil(self.agent_radius / cs),
+            "walkableSlopeAngle": settings.agent_max_slope,
+            "walkableHeight": math.ceil(settings.agent_height / ch),
+            "walkableClimb": math.floor(settings.agent_max_climb / ch),
+            "walkableRadius": math.ceil(settings.agent_radius / cs),
             "maxEdgeLen": max(1, int(12.0 / cs)),
             "maxSimplificationError": 1.3,
             "minRegionArea": 64,
@@ -137,7 +118,7 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
             self.report({"WARNING"}, "No walkable area found")
             return {"CANCELLED"}
 
-        source_name = selected[0].name if len(selected) == 1 else "multi"
+        source_name = source_objects[0].name if len(source_objects) == 1 else "multi"
         nm_name = f"navmesh_{source_name}"
 
         existing = bpy.data.objects.get(nm_name)
@@ -172,14 +153,16 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
 
         nm_obj["navmesh_cs"] = cs
         nm_obj["navmesh_ch"] = ch
-        nm_obj["navmesh_agent_height"] = self.agent_height
-        nm_obj["navmesh_agent_radius"] = self.agent_radius
-        nm_obj["navmesh_agent_max_climb"] = self.agent_max_climb
-        nm_obj["navmesh_agent_max_slope"] = self.agent_max_slope
+        nm_obj["navmesh_agent_height"] = settings.agent_height
+        nm_obj["navmesh_agent_radius"] = settings.agent_radius
+        nm_obj["navmesh_agent_max_climb"] = settings.agent_max_climb
+        nm_obj["navmesh_agent_max_slope"] = settings.agent_max_slope
         nm_obj["navmesh_poly_count"] = stats["polyCount"]
         nm_obj["navmesh_vert_count"] = stats["vertCount"]
         nm_obj["navmesh_tri_count"] = stats["triCount"]
         nm_obj["navmesh_build_time"] = stats["buildTime"]
+
+        nm_obj["navmesh_source_objects"] = "|".join(o.name for o in source_objects)
 
         bpy.ops.object.select_all(action="DESELECT")
         nm_obj.select_set(True)

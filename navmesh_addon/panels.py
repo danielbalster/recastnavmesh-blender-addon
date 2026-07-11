@@ -1,4 +1,5 @@
 import bpy
+from bpy.props import FloatProperty, PointerProperty
 
 
 MATERIAL_NAME = "NavMesh_Material"
@@ -18,6 +19,68 @@ def _get_or_create_material():
     return mat
 
 
+class NavMeshSettings(bpy.types.PropertyGroup):
+    cell_size: FloatProperty(
+        name="Cell Size",
+        description="XZ-plane cell size in world units",
+        default=0.3,
+        min=0.01,
+        soft_max=2.0,
+    )
+    cell_height: FloatProperty(
+        name="Cell Height",
+        description="Y-axis cell size in world units",
+        default=0.2,
+        min=0.01,
+        soft_max=1.0,
+    )
+    agent_height: FloatProperty(
+        name="Agent Height",
+        description="Minimum floor-to-ceiling height for walkable areas",
+        default=2.0,
+        min=0.1,
+        soft_max=5.0,
+    )
+    agent_radius: FloatProperty(
+        name="Agent Radius",
+        description="Erosion radius around obstacles",
+        default=0.6,
+        min=0.0,
+        soft_max=2.0,
+    )
+    agent_max_climb: FloatProperty(
+        name="Max Climb",
+        description="Maximum traversable step height",
+        default=0.9,
+        min=0.0,
+        soft_max=2.0,
+    )
+    agent_max_slope: FloatProperty(
+        name="Max Slope",
+        description="Maximum walkable slope angle in degrees",
+        default=45.0,
+        min=0.0,
+        max=89.0,
+    )
+
+
+def _sync_settings_from_navmesh(settings, navmesh_obj):
+    settings.cell_size = navmesh_obj.get("navmesh_cs", settings.cell_size)
+    settings.cell_height = navmesh_obj.get("navmesh_ch", settings.cell_height)
+    settings.agent_height = navmesh_obj.get(
+        "navmesh_agent_height", settings.agent_height
+    )
+    settings.agent_radius = navmesh_obj.get(
+        "navmesh_agent_radius", settings.agent_radius
+    )
+    settings.agent_max_climb = navmesh_obj.get(
+        "navmesh_agent_max_climb", settings.agent_max_climb
+    )
+    settings.agent_max_slope = navmesh_obj.get(
+        "navmesh_agent_max_slope", settings.agent_max_slope
+    )
+
+
 class NAVMESH_PT_Main(bpy.types.Panel):
     bl_idname = "NAVMESH_PT_main"
     bl_label = "NavMesh"
@@ -27,56 +90,72 @@ class NAVMESH_PT_Main(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        obj = context.active_object
+        settings = context.scene.navmesh_settings
+
+        navmesh_obj = None
+        for obj in context.selected_objects:
+            if "navmesh_cs" in obj:
+                navmesh_obj = obj
+                break
+
+        if navmesh_obj is not None:
+            _sync_settings_from_navmesh(settings, navmesh_obj)
 
         layout.operator("navmesh.rebuild", text="Rebuild", icon="MESH_DATA")
-
-        selected_meshes = [o for o in context.selected_objects if o.type == "MESH"]
-        if not selected_meshes:
-            layout.label(text="Select mesh objects and click Rebuild", icon="INFO")
-
-        if obj is None or "navmesh_cs" not in obj:
-            return
-
-        layout.separator()
 
         box = layout.box()
         box.label(text="Agent", icon="OUTLINER_OB_ARMATURE")
         col = box.column(align=True)
-        col.prop(obj, '["navmesh_agent_height"]', text="Height", emboss=False)
-        col.prop(obj, '["navmesh_agent_radius"]', text="Radius", emboss=False)
-        col.prop(obj, '["navmesh_agent_max_climb"]', text="Max Climb", emboss=False)
-        col.prop(obj, '["navmesh_agent_max_slope"]', text="Max Slope", emboss=False)
-        for item in col.children:
-            item.enabled = False
+        col.prop(settings, "agent_height", text="Height")
+        col.prop(settings, "agent_radius", text="Radius")
+        col.prop(settings, "agent_max_climb", text="Max Climb")
+        col.prop(settings, "agent_max_slope", text="Max Slope")
 
         box = layout.box()
         box.label(text="Cells", icon="GRID")
         col = box.column(align=True)
-        col.prop(obj, '["navmesh_cs"]', text="Cell Size", emboss=False)
-        col.prop(obj, '["navmesh_ch"]', text="Cell Height", emboss=False)
-        for item in col.children:
-            item.enabled = False
+        col.prop(settings, "cell_size", text="Cell Size")
+        col.prop(settings, "cell_height", text="Cell Height")
+
+        if navmesh_obj is None:
+            layout.separator()
+            layout.label(text="Select mesh objects and click Rebuild", icon="INFO")
+            return
+
+        layout.separator()
+
+        if "navmesh_source_objects" in navmesh_obj:
+            src_box = layout.box()
+            src_box.label(text="Source Objects", icon="OBJECT_DATA")
+            src_names = navmesh_obj["navmesh_source_objects"].split("|")
+            for name in src_names:
+                exists = name in bpy.data.objects
+                icon = "OUTLINER_OB_MESH" if exists else "ERROR"
+                src_box.label(text=name, icon=icon)
 
         box = layout.box()
         box.label(text="Stats", icon="INFO")
         col = box.column(align=True)
-        col.prop(obj, '["navmesh_poly_count"]', text="Polygons", emboss=False)
-        col.prop(obj, '["navmesh_vert_count"]', text="Vertices", emboss=False)
-        col.prop(obj, '["navmesh_tri_count"]', text="Triangles", emboss=False)
-        col.prop(obj, '["navmesh_build_time"]', text="Build Time (s)", emboss=False)
+        col.prop(navmesh_obj, '["navmesh_poly_count"]', text="Polygons", emboss=False)
+        col.prop(navmesh_obj, '["navmesh_vert_count"]', text="Vertices", emboss=False)
+        col.prop(navmesh_obj, '["navmesh_tri_count"]', text="Triangles", emboss=False)
+        col.prop(
+            navmesh_obj, '["navmesh_build_time"]', text="Build Time (s)", emboss=False
+        )
         for item in col.children:
             item.enabled = False
 
 
-classes = [NAVMESH_PT_Main]
+classes = [NavMeshSettings, NAVMESH_PT_Main]
 
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    bpy.types.Scene.navmesh_settings = PointerProperty(type=NavMeshSettings)
 
 
 def unregister():
+    del bpy.types.Scene.navmesh_settings
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
