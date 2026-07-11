@@ -1,6 +1,6 @@
 import bpy
 import traceback
-from bpy.props import FloatProperty, PointerProperty
+from bpy.props import FloatProperty, IntProperty, PointerProperty
 
 
 MATERIAL_NAME = "NavMesh_Material"
@@ -63,6 +63,55 @@ class NavMeshSettings(bpy.types.PropertyGroup):
         min=0.0,
         max=89.0,
     )
+    max_edge_len: FloatProperty(
+        name="Max Edge Length",
+        description="Maximum contour edge length in world units",
+        default=12.0,
+        min=0.1,
+        soft_max=50.0,
+    )
+    max_simplification_error: FloatProperty(
+        name="Max Simplification Error",
+        description="Maximum contour simplification error in voxels",
+        default=1.3,
+        min=0.1,
+        soft_max=10.0,
+    )
+    min_region_area: FloatProperty(
+        name="Min Region Area",
+        description="Minimum region size in square world units",
+        default=5.76,
+        min=0.0,
+        soft_max=100.0,
+    )
+    merge_region_area: FloatProperty(
+        name="Merge Region Area",
+        description="Region merge threshold in square world units",
+        default=36.0,
+        min=0.0,
+        soft_max=500.0,
+    )
+    max_verts_per_poly: IntProperty(
+        name="Max Verts Per Poly",
+        description="Maximum vertices per navigation polygon",
+        default=6,
+        min=3,
+        max=12,
+    )
+    detail_sample_dist: FloatProperty(
+        name="Detail Sample Distance",
+        description="Detail mesh sample distance in world units",
+        default=6.0,
+        min=0.0,
+        soft_max=30.0,
+    )
+    detail_sample_max_error: FloatProperty(
+        name="Detail Sample Max Error",
+        description="Maximum detail mesh simplification error in world units",
+        default=1.0,
+        min=0.0,
+        soft_max=10.0,
+    )
 
 
 def _sync_settings_from_navmesh(settings, navmesh_obj):
@@ -122,6 +171,21 @@ class NAVMESH_PT_Main(bpy.types.Panel):
             col = box.column(align=True)
             col.prop(settings, "cell_size", text="Cell Size")
             col.prop(settings, "cell_height", text="Cell Height")
+
+            box = layout.box()
+            box.label(text="Region", icon="SELECT_DIFFERENCE")
+            col = box.column(align=True)
+            col.prop(settings, "min_region_area", text="Min Area")
+            col.prop(settings, "merge_region_area", text="Merge Area")
+
+            box = layout.box()
+            box.label(text="Mesh", icon="MESH_GRID")
+            col = box.column(align=True)
+            col.prop(settings, "max_edge_len", text="Max Edge Length")
+            col.prop(settings, "max_simplification_error", text="Max Edge Error")
+            col.prop(settings, "max_verts_per_poly", text="Max Verts Per Poly")
+            col.prop(settings, "detail_sample_dist", text="Detail Sample Dist")
+            col.prop(settings, "detail_sample_max_error", text="Detail Max Error")
 
             layout.separator()
 

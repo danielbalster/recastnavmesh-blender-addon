@@ -128,13 +128,13 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
             "walkableHeight": math.ceil(settings.agent_height / ch),
             "walkableClimb": math.floor(settings.agent_max_climb / ch),
             "walkableRadius": math.ceil(settings.agent_radius / cs),
-            "maxEdgeLen": max(1, int(12.0 / cs)),
-            "maxSimplificationError": 1.3,
-            "minRegionArea": 64,
-            "mergeRegionArea": 400,
-            "maxVertsPerPoly": 6,
-            "detailSampleDist": 6.0,
-            "detailSampleMaxError": 1.0,
+            "maxEdgeLen": max(1, int(settings.max_edge_len / cs)),
+            "maxSimplificationError": settings.max_simplification_error,
+            "minRegionArea": int(settings.min_region_area / (cs * cs)),
+            "mergeRegionArea": int(settings.merge_region_area / (cs * cs)),
+            "maxVertsPerPoly": settings.max_verts_per_poly,
+            "detailSampleDist": settings.detail_sample_dist,
+            "detailSampleMaxError": settings.detail_sample_max_error,
             "borderSize": 0,
             "tileSize": 0,
         }
@@ -190,6 +190,13 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         nm_obj["navmesh_agent_radius"] = settings.agent_radius
         nm_obj["navmesh_agent_max_climb"] = settings.agent_max_climb
         nm_obj["navmesh_agent_max_slope"] = settings.agent_max_slope
+        nm_obj["navmesh_max_edge_len"] = settings.max_edge_len
+        nm_obj["navmesh_max_simplification_error"] = settings.max_simplification_error
+        nm_obj["navmesh_min_region_area"] = settings.min_region_area
+        nm_obj["navmesh_merge_region_area"] = settings.merge_region_area
+        nm_obj["navmesh_max_verts_per_poly"] = settings.max_verts_per_poly
+        nm_obj["navmesh_detail_sample_dist"] = settings.detail_sample_dist
+        nm_obj["navmesh_detail_sample_max_error"] = settings.detail_sample_max_error
         nm_obj["navmesh_poly_count"] = stats["polyCount"]
         nm_obj["navmesh_vert_count"] = stats["vertCount"]
         nm_obj["navmesh_tri_count"] = stats["triCount"]
