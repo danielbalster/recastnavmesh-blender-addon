@@ -523,12 +523,12 @@ All settings plus build stats (poly_count, vert_count, tri_count, build_time) ar
 
 ## Blender Flatpak deployment
 
-**Install path**: `/home/dbalster/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/`
+**Install path**: `$HOME/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/`
 
 After editing workspace files, copy them to the installed addon directory:
 ```bash
-cp navmesh_addon/panels.py ~/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/
-cp navmesh_addon/operators.py ~/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/
+cp navmesh_addon/panels.py $HOME/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/
+cp navmesh_addon/operators.py $HOME/.var/app/org.blender.Blender/config/blender/5.1/scripts/addons/navmesh_addon/
 ```
 
 **Restart is required**: Blender does not auto-reload addon file changes. `importlib.reload()` and `bpy.ops.script.reload()` are unreliable. A full Blender restart or addon disable/re-enable through Preferences is always needed.
@@ -536,6 +536,8 @@ cp navmesh_addon/operators.py ~/.var/app/org.blender.Blender/config/blender/5.1/
 **Error display**: `traceback.print_exc()` writes to Blender's system console (Window → Toggle System Console on Linux). For user-visible errors, render them into the panel UILayout.
 
 ## Release checklist
+
+**IMPORTANT: On EVERY release (patch, minor, or major), the version MUST be bumped in `navmesh_addon/__init__.py` (`bl_info["version"]`) before tagging.** The CI release workflow uses this version for the GitHub Release and zip filename. Forgetting to bump will result in a release with a stale version number.
 
 1. Bump version in `navmesh_addon/__init__.py` (`bl_info["version"]`)
 2. Commit: `git commit -m "Release vX.Y.Z"`
