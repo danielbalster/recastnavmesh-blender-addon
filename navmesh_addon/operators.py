@@ -36,7 +36,9 @@ def _resolve_source_objects(context):
         coll_name = navmesh_obj["navmesh_source_collection"]
         coll = bpy.data.collections.get(coll_name)
         if coll is not None:
-            objects = [o for o in coll.objects if o.type == "MESH"]
+            objects = [
+                o for o in coll.objects if o.type == "MESH" and "navmesh_cs" not in o
+            ]
             if objects:
                 return objects, navmesh_obj
 
@@ -45,7 +47,9 @@ def _resolve_source_objects(context):
         coll_name = fallback["navmesh_source_collection"]
         coll = bpy.data.collections.get(coll_name)
         if coll is not None:
-            objects = [o for o in coll.objects if o.type == "MESH"]
+            objects = [
+                o for o in coll.objects if o.type == "MESH" and "navmesh_cs" not in o
+            ]
             if objects:
                 return objects, fallback
 
@@ -170,7 +174,6 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
         new_mesh.update()
 
         nm_obj = bpy.data.objects.new(nm_name, new_mesh)
-        context.collection.objects.link(nm_obj)
 
         mat = _get_or_create_material()
         if mat and nm_obj.data.materials:
@@ -203,6 +206,8 @@ class NAVMESH_OT_Rebuild(bpy.types.Operator):
                 coll.objects.link(obj)
 
         nm_obj["navmesh_source_collection"] = coll_name
+
+        context.scene.collection.objects.link(nm_obj)
 
         bpy.ops.object.select_all(action="DESELECT")
         nm_obj.select_set(True)
@@ -253,10 +258,8 @@ class NAVMESH_OT_AddSourceObject(bpy.types.Operator):
 class NAVMESH_OT_RemoveSourceObject(bpy.types.Operator):
     bl_idname = "navmesh.remove_source_object"
     bl_label = "Remove from NavMesh Source"
-    bl_description = "Remove this object from the navmesh source collection"
+    bl_description = "Remove selected mesh objects from the navmesh source collection"
     bl_options = {"REGISTER", "UNDO"}
-
-    object_name: bpy.props.StringProperty(name="Object Name")
 
     def execute(self, context):
         navmesh_obj = _find_navmesh_by_collection(context.selected_objects)
@@ -271,13 +274,21 @@ class NAVMESH_OT_RemoveSourceObject(bpy.types.Operator):
             self.report({"ERROR"}, "NavMesh has no source collection")
             return {"CANCELLED"}
 
-        obj = bpy.data.objects.get(self.object_name)
-        if obj is not None and obj.name in coll.objects:
-            coll.objects.unlink(obj)
-            self.report({"INFO"}, f"Removed: {self.object_name}")
-        else:
-            self.report({"WARNING"}, f"Object '{self.object_name}' not in collection")
+        removed = []
+        for obj in context.selected_objects:
+            if (
+                obj.type == "MESH"
+                and "navmesh_cs" not in obj
+                and obj.name in coll.objects
+            ):
+                coll.objects.unlink(obj)
+                removed.append(obj.name)
 
+        if not removed:
+            self.report({"WARNING"}, "No source objects selected to remove")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, f"Removed: {', '.join(removed)}")
         return {"FINISHED"}
 
 

@@ -1,4 +1,5 @@
 import bpy
+import traceback
 from bpy.props import FloatProperty, PointerProperty
 
 
@@ -81,6 +82,18 @@ def _sync_settings_from_navmesh(settings, navmesh_obj):
     )
 
 
+def _find_navmesh(context):
+    for obj in context.selected_objects:
+        if "navmesh_cs" in obj:
+            return obj
+    if context.active_object is not None and "navmesh_cs" in context.active_object:
+        return context.active_object
+    for obj in bpy.data.objects:
+        if "navmesh_cs" in obj:
+            return obj
+    return None
+
+
 class NAVMESH_PT_Main(bpy.types.Panel):
     bl_idname = "NAVMESH_PT_main"
     bl_label = "NavMesh"
@@ -89,83 +102,75 @@ class NAVMESH_PT_Main(bpy.types.Panel):
     bl_category = "NavMesh"
 
     def draw(self, context):
-        layout = self.layout
-        settings = context.scene.navmesh_settings
+        try:
+            layout = self.layout
+            settings = context.scene.navmesh_settings
+            nm = _find_navmesh(context)
 
-        navmesh_obj = None
-        for obj in context.selected_objects:
-            if "navmesh_cs" in obj:
-                navmesh_obj = obj
-                break
-        if navmesh_obj is None and context.active_object is not None:
-            if "navmesh_cs" in context.active_object:
-                navmesh_obj = context.active_object
-        if navmesh_obj is None:
-            for obj in bpy.data.objects:
-                if "navmesh_cs" in obj:
-                    navmesh_obj = obj
-                    break
+            layout.operator("navmesh.rebuild", text="Rebuild", icon="MESH_DATA")
 
-        if navmesh_obj is not None:
-            _sync_settings_from_navmesh(settings, navmesh_obj)
+            box = layout.box()
+            box.label(text="Agent", icon="OUTLINER_OB_ARMATURE")
+            col = box.column(align=True)
+            col.prop(settings, "agent_height", text="Height")
+            col.prop(settings, "agent_radius", text="Radius")
+            col.prop(settings, "agent_max_climb", text="Max Climb")
+            col.prop(settings, "agent_max_slope", text="Max Slope")
 
-        layout.operator("navmesh.rebuild", text="Rebuild", icon="MESH_DATA")
+            box = layout.box()
+            box.label(text="Cells", icon="GRID")
+            col = box.column(align=True)
+            col.prop(settings, "cell_size", text="Cell Size")
+            col.prop(settings, "cell_height", text="Cell Height")
 
-        box = layout.box()
-        box.label(text="Agent", icon="OUTLINER_OB_ARMATURE")
-        col = box.column(align=True)
-        col.prop(settings, "agent_height", text="Height")
-        col.prop(settings, "agent_radius", text="Radius")
-        col.prop(settings, "agent_max_climb", text="Max Climb")
-        col.prop(settings, "agent_max_slope", text="Max Slope")
-
-        box = layout.box()
-        box.label(text="Cells", icon="GRID")
-        col = box.column(align=True)
-        col.prop(settings, "cell_size", text="Cell Size")
-        col.prop(settings, "cell_height", text="Cell Height")
-
-        if navmesh_obj is None:
             layout.separator()
-            layout.label(text="Select mesh objects and click Rebuild", icon="INFO")
-            return
 
-        layout.separator()
+            if nm is None:
+                layout.label(text="Select mesh objects and click Rebuild", icon="INFO")
+            else:
+                coll_name = nm.get("navmesh_source_collection", "")
+                coll = bpy.data.collections.get(coll_name)
+                if coll is not None:
+                    mesh_count = sum(1 for o in coll.objects if o.type == "MESH")
+                    src_box = layout.box()
+                    src_box.label(text="Source Objects", icon="OUTLINER_COLLECTION")
+                    src_box.label(text=f"Collection: {coll_name}")
+                    src_box.label(
+                        text=f"{mesh_count} mesh objects (manage in Outliner)"
+                    )
+                    row = src_box.row(align=True)
+                    row.operator(
+                        "navmesh.add_source_object", text="Add Selected", icon="ADD"
+                    )
+                    row.operator(
+                        "navmesh.remove_source_object",
+                        text="Remove Selected",
+                        icon="REMOVE",
+                    )
 
-        coll_name = navmesh_obj.get("navmesh_source_collection", "")
-        coll = bpy.data.collections.get(coll_name)
-        if coll is not None:
-            src_box = layout.box()
-            src_box.label(text=f"Source: {coll_name}", icon="OUTLINER_COLLECTION")
-            for obj in coll.objects:
-                if obj.type != "MESH":
-                    continue
-                row = src_box.row(align=True)
-                row.label(text=obj.name, icon="OUTLINER_OB_MESH")
-                op = row.operator(
-                    "navmesh.remove_source_object",
-                    text="",
-                    icon="X",
-                    emboss=False,
-                )
-                op.object_name = obj.name
-            row = src_box.row()
-            row.operator("navmesh.add_source_object", text="Add Selected", icon="ADD")
-            row.label(text="")
-
-        box = layout.box()
-        box.label(text="Stats", icon="INFO")
-        col = box.column(align=True)
-        for key, label in [
-            ("navmesh_poly_count", "Polygons"),
-            ("navmesh_vert_count", "Vertices"),
-            ("navmesh_tri_count", "Triangles"),
-            ("navmesh_build_time", "Build Time (s)"),
-        ]:
-            if key in navmesh_obj:
-                col.prop(navmesh_obj, f'["{key}"]', text=label, emboss=False)
-        for item in col.children:
-            item.enabled = False
+                stat_items = [
+                    ("navmesh_poly_count", "Polygons"),
+                    ("navmesh_vert_count", "Vertices"),
+                    ("navmesh_tri_count", "Triangles"),
+                    ("navmesh_build_time", "Build Time (s)"),
+                ]
+                has_stats = any(key in nm for key, label in stat_items)
+                if has_stats:
+                    box = layout.box()
+                    box.label(text="Stats", icon="INFO")
+                    col = box.column(align=True)
+                    col.enabled = False
+                    for key, label in stat_items:
+                        if key in nm:
+                            col.prop(nm, f'["{key}"]', text=label, emboss=False)
+        except Exception:
+            traceback.print_exc()
+            layout = self.layout
+            box = layout.box()
+            box.label(text="Panel draw error", icon="ERROR")
+            col = box.column(align=True)
+            for line in traceback.format_exc().splitlines()[-8:]:
+                col.label(text=line)
 
 
 classes = [NavMeshSettings, NAVMESH_PT_Main]
