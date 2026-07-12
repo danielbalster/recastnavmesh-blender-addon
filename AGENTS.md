@@ -49,8 +49,8 @@ git push origin v0.1.0
 
 ### CI/CD
 - **Trigger**: pushing a `v*` tag (e.g., `v0.1.0`)
-- **Builds**: 5 platforms — linux-x64, linux-arm64, macos-x64, macos-arm64, windows-x64
-- **Release**: Creates GitHub Release with 5 per-platform zips (`navmesh_{platform}-{version}.zip`), each containing the full add-on directory with the native library already in `navmesh_addon/libs/`
+- **Builds**: 4 platforms — linux-x64, linux-arm64, macos-arm64, windows-x64
+- **Release**: Creates GitHub Release with 4 per-platform zips (`navmesh_{platform}-{version}.zip`), each containing the full add-on directory with the native library already in `navmesh_addon/libs/`
 - Users download their platform's zip and install directly via Blender add-on preferences
 
 ## Architecture
@@ -543,10 +543,9 @@ cp navmesh_addon/operators.py $HOME/.var/app/org.blender.Blender/config/blender/
 2. Commit: `git commit -m "Release vX.Y.Z"`
 3. Tag: `git tag vX.Y.Z`
 4. Push: `git push origin main && git push origin vX.Y.Z`
-5. CI builds all 5 platforms and creates a GitHub Release with per-platform zips:
+5. CI builds all 4 platforms and creates a GitHub Release with per-platform zips:
    - `navmesh_linux-x64-vX.Y.Z.zip`
    - `navmesh_linux-arm64-vX.Y.Z.zip`
-   - `navmesh_macos-x64-vX.Y.Z.zip`
    - `navmesh_macos-arm64-vX.Y.Z.zip`
    - `navmesh_windows-x64-vX.Y.Z.zip`
 6. Edit the release notes on GitHub if needed

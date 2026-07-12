@@ -62,34 +62,6 @@ jobs:
           name: lib-linux-arm64
           path: navmesh_addon/libs/libNavMeshWrapper.so
 
-  build-macos-x64:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clone recastnavigation
-        run: |
-          git clone --depth 1 --branch main \
-            https://github.com/recastnavigation/recastnavigation.git \
-            recastnavigation
-
-      - name: Build wrapper
-        run: |
-          mkdir -p navmesh_addon/libs
-          g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
-            -I recastnavigation/Recast/Include \
-            -I recastnavigation/Detour/Include \
-            -o navmesh_addon/libs/libNavMeshWrapper.dylib \
-            recastnavigation/Recast/Source/*.cpp \
-            recastnavigation/Detour/Source/*.cpp \
-            navmesh_wrapper/wrapper.cpp
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-macos-x64
-          path: navmesh_addon/libs/libNavMeshWrapper.dylib
-
   build-macos-arm64:
     runs-on: macos-latest
     steps:
@@ -154,7 +126,6 @@ jobs:
     needs:
       - build-linux-x64
       - build-linux-arm64
-      #- build-macos-x64
       - build-macos-arm64
       - build-windows-x64
     runs-on: ubuntu-latest
@@ -171,10 +142,10 @@ jobs:
 
       - name: Package per-platform add-on zips
         run: |
-          for platform in linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64; do
+          for platform in linux-x64 linux-arm64 macos-arm64 windows-x64; do
             case "$platform" in
               linux-x64|linux-arm64) ext="so" ;;
-              macos-x64|macos-arm64) ext="dylib" ;;
+              macos-arm64) ext="dylib" ;;
               windows-x64) ext="dll" ;;
             esac
             mkdir -p navmesh_addon/libs
