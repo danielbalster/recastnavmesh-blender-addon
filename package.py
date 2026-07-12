@@ -2,8 +2,10 @@
 """Package the add-on into a .zip file for Blender installation.
 
 Usage:
-    python package.py              # creates navmesh_addon.zip
-    python package.py --version X  # includes version in filename
+    python package.py                           # creates navmesh_addon.zip
+    python package.py --version v0.3.0          # creates navmesh_addon-v0.3.0.zip
+    python package.py --platform linux-x64      # creates navmesh_linux-x64.zip
+    python package.py --platform linux-x64 --version v0.3.0  # navmesh_linux-x64-v0.3.0.zip
 """
 
 import os
@@ -17,10 +19,17 @@ ADDON_DIR = os.path.join(SCRIPT_DIR, "navmesh_addon")
 
 def main():
     parser = argparse.ArgumentParser(description="Package Blender add-on")
-    parser.add_argument("--version", default=None, help="Version string")
+    parser.add_argument("--version", default=None, help="Version string (e.g. v0.3.0)")
+    parser.add_argument(
+        "--platform", default=None, help="Platform ID (e.g. linux-x64, windows-x64)"
+    )
     args = parser.parse_args()
 
-    filename = "navmesh_addon"
+    if args.platform:
+        filename = f"navmesh_{args.platform}"
+    else:
+        filename = "navmesh_addon"
+
     if args.version:
         filename += f"-{args.version}"
     filename += ".zip"
@@ -42,7 +51,10 @@ def main():
     print(
         "Install in Blender: Edit > Preferences > Add-ons > Install... > select this file"
     )
-    print("Make sure navmesh_addon/libs/libNavMeshWrapper.so exists before installing.")
+    if not args.platform:
+        print(
+            "Make sure navmesh_addon/libs/libNavMeshWrapper.so exists before installing."
+        )
 
 
 if __name__ == "__main__":

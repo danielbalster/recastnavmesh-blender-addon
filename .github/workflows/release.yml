@@ -6,8 +6,8 @@ on:
       - "v*"
 
 jobs:
-  build-libs:
-    runs-on: ubuntu-latest
+  build-linux-x64:
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -28,31 +28,163 @@ jobs:
             recastnavigation/Detour/Source/*.cpp \
             navmesh_wrapper/wrapper.cpp
 
-      - name: Upload library
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lib-linux
+          name: lib-linux-x64
           path: navmesh_addon/libs/libNavMeshWrapper.so
 
+  build-linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone recastnavigation
+        run: |
+          git clone --depth 1 --branch main \
+            https://github.com/recastnavigation/recastnavigation.git \
+            recastnavigation
+
+      - name: Build wrapper
+        run: |
+          mkdir -p navmesh_addon/libs
+          g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
+            -I recastnavigation/Recast/Include \
+            -I recastnavigation/Detour/Include \
+            -o navmesh_addon/libs/libNavMeshWrapper.so \
+            recastnavigation/Recast/Source/*.cpp \
+            recastnavigation/Detour/Source/*.cpp \
+            navmesh_wrapper/wrapper.cpp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-linux-arm64
+          path: navmesh_addon/libs/libNavMeshWrapper.so
+
+  build-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone recastnavigation
+        run: |
+          git clone --depth 1 --branch main \
+            https://github.com/recastnavigation/recastnavigation.git \
+            recastnavigation
+
+      - name: Build wrapper
+        run: |
+          mkdir -p navmesh_addon/libs
+          g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
+            -I recastnavigation/Recast/Include \
+            -I recastnavigation/Detour/Include \
+            -o navmesh_addon/libs/libNavMeshWrapper.dylib \
+            recastnavigation/Recast/Source/*.cpp \
+            recastnavigation/Detour/Source/*.cpp \
+            navmesh_wrapper/wrapper.cpp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-macos-x64
+          path: navmesh_addon/libs/libNavMeshWrapper.dylib
+
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone recastnavigation
+        run: |
+          git clone --depth 1 --branch main \
+            https://github.com/recastnavigation/recastnavigation.git \
+            recastnavigation
+
+      - name: Build wrapper
+        run: |
+          mkdir -p navmesh_addon/libs
+          g++ -shared -fPIC -O2 -ffast-math -ffinite-math-only \
+            -I recastnavigation/Recast/Include \
+            -I recastnavigation/Detour/Include \
+            -o navmesh_addon/libs/libNavMeshWrapper.dylib \
+            recastnavigation/Recast/Source/*.cpp \
+            recastnavigation/Detour/Source/*.cpp \
+            navmesh_wrapper/wrapper.cpp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-macos-arm64
+          path: navmesh_addon/libs/libNavMeshWrapper.dylib
+
+  build-windows-x64:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone recastnavigation
+        run: |
+          git clone --depth 1 --branch main https://github.com/recastnavigation/recastnavigation.git recastnavigation
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Build wrapper
+        shell: pwsh
+        run: |
+          $RecastSources = (Get-ChildItem recastnavigation/Recast/Source/*.cpp).FullName
+          $DetourSources = (Get-ChildItem recastnavigation/Detour/Source/*.cpp).FullName
+          $sources = $RecastSources + $DetourSources + @("navmesh_wrapper/wrapper.cpp")
+          New-Item -ItemType Directory -Force navmesh_addon/libs | Out-Null
+          cl /LD /O2 /fp:fast /MT /EHsc `
+            /I recastnavigation/Recast/Include `
+            /I recastnavigation/Detour/Include `
+            /Fe:navmesh_addon/libs/libNavMeshWrapper.dll `
+            $sources
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-windows-x64
+          path: navmesh_addon/libs/libNavMeshWrapper.dll
+
   release:
-    needs: build-libs
+    needs:
+      - build-linux-x64
+      - build-linux-arm64
+      - build-macos-x64
+      - build-macos-arm64
+      - build-windows-x64
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download library artifact
+      - name: Download all library artifacts
         uses: actions/download-artifact@v4
         with:
-          name: lib-linux
-          path: navmesh_addon/libs
+          pattern: lib-*
+          path: artifacts
 
-      - name: Package add-on (includes libNavMeshWrapper.so)
-        run: python3 package.py --version ${{ github.ref_name }}
+      - name: Package per-platform add-on zips
+        run: |
+          for platform in linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64; do
+            case "$platform" in
+              linux-x64|linux-arm64) ext="so" ;;
+              macos-x64|macos-arm64) ext="dylib" ;;
+              windows-x64) ext="dll" ;;
+            esac
+            mkdir -p navmesh_addon/libs
+            cp "artifacts/lib-${platform}/libNavMeshWrapper.${ext}" navmesh_addon/libs/
+            python3 package.py --platform "$platform" --version "${{ github.ref_name }}"
+            rm -f navmesh_addon/libs/libNavMeshWrapper.${ext}
+          done
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: navmesh_addon-*.zip
+          files: navmesh_*.zip
           generate_release_notes: true
